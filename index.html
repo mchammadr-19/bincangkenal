@@ -884,7 +884,7 @@
         </div>
 
         <button onclick="Multiplayer.openPlayerList()"
-            class="fixed bottom-6 left-6 md:bottom-12 md:left-12 bg-white/10 hover:bg-white/20 px-4 py-3 md:px-6 md:py-4 rounded-full border border-white/30 transition-all z-[100] backdrop-blur-md shadow-[0_0_20px_rgba(255,255,255,0.2)] flex items-center gap-2 group active:scale-95"
+            class="fixed bottom-6 left-6 md:bottom-12 md:left-12 w-12 h-12 md:w-14 md:h-14 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full border border-white/30 transition-all z-[100] backdrop-blur-md shadow-[0_0_20px_rgba(255,255,255,0.2)] group active:scale-95"
             title="Cek Daftar Pemain">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" class="text-white group-hover:scale-110 transition-transform">
@@ -893,7 +893,6 @@
                 <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-            <span class="text-xs md:text-sm font-bold uppercase tracking-widest">Daftar Pemain</span>
         </button>
 
         <button id="btn-start-host" onclick="Multiplayer.startHostGame()"
@@ -965,7 +964,7 @@
 
         <!-- Tombol Daftar Pemain -->
         <button onclick="Multiplayer.openPlayerList()"
-            class="fixed bottom-6 left-6 md:bottom-12 md:left-12 bg-white/10 hover:bg-white/20 px-4 py-3 md:px-6 md:py-4 rounded-full border border-white/30 transition-all z-[100] backdrop-blur-md shadow-[0_0_20px_rgba(255,255,255,0.2)] flex items-center gap-2 group active:scale-95"
+            class="fixed bottom-6 left-6 md:bottom-12 md:left-12 w-12 h-12 md:w-14 md:h-14 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full border border-white/30 transition-all z-[100] backdrop-blur-md shadow-[0_0_20px_rgba(255,255,255,0.2)] group active:scale-95"
             title="Cek Daftar Pemain">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" class="text-white group-hover:scale-110 transition-transform">
@@ -974,7 +973,6 @@
                 <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-            <span class="text-xs md:text-sm font-bold uppercase tracking-widest hidden sm:block">Daftar Pemain</span>
         </button>
 
         <button onclick="Multiplayer.hostNextPhase()" id="btn-next-host"
@@ -1733,21 +1731,30 @@
             },
             listenHostLobby: () => {
                 if (State.unsubscribeRoom) { State.unsubscribeRoom(); State.unsubscribeRoom = null; }
+                State.prevPlayerIds = null;
                 State.unsubscribeRoom = onSnapshot(doc(getRoomsRef(), State.currentRoomId), (snap) => {
                     if (!State.currentRoomId) return;
                     if (!snap.exists()) return; const data = snap.data(); const pKeys = Object.keys(data.players);
                     const countEl = document.getElementById('host-player-count');
                     if (countEl) countEl.innerText = pKeys.length;
                     Multiplayer.renderPlayerList(data.players); // Render List
+
+                    // Check for new players who joined to show toast
+                    if (!State.prevPlayerIds) {
+                        State.prevPlayerIds = pKeys;
+                    } else {
+                        pKeys.forEach((uid) => {
+                            if (!State.prevPlayerIds.includes(uid)) {
+                                const pName = data.players[uid]?.name || "Seorang pemain";
+                                UI.showToast(`${pName} berhasil bergabung`);
+                            }
+                        });
+                        State.prevPlayerIds = pKeys;
+                    }
+
                     const container = document.getElementById('floating-players');
                     if (container) {
                         container.innerHTML = '';
-                        pKeys.forEach((uid, i) => {
-                            const el = document.createElement('button'); el.className = 'floating-name'; el.innerText = data.players[uid].name;
-                            el.style.top = `${20 + (i * 15) % 60}%`; el.style.left = i % 2 === 0 ? '10%' : 'auto'; el.style.right = i % 2 !== 0 ? '10%' : 'auto'; el.style.animationDelay = `${i * 0.5}s`;
-                            el.title = "Keluarkan pemain"; el.onclick = () => Multiplayer.kickPlayer(uid);
-                            container.appendChild(el);
-                        });
                     }
                     const btn = document.getElementById('btn-start-host');
                     if (btn) {
