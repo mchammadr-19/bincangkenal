@@ -2194,13 +2194,14 @@
                         // Tema Hijau untuk yang terpilih (Pemain aktif saat playing)
                         const isMeActive = isPlaying && (d.currentGreenUid === State.currentUser.uid || d.secondaryGreenUid === State.currentUser.uid);
                         
-                        // Vibrate if newly activated
+                        // Vibrate if newly activated (1x, firm, optimized for Android & iOS support check)
                         const vibrateKey = `${d.currentIndex}_${d.currentGreenUid}_${d.secondaryGreenUid}`;
                         if (isMeActive && State.lastVibrateKey !== vibrateKey) {
                             State.lastVibrateKey = vibrateKey;
                             if (navigator.vibrate) {
                                 try {
-                                    navigator.vibrate([200, 100, 200]);
+                                    // Firm 300ms single vibration for Android/supported devices
+                                    navigator.vibrate(300);
                                 } catch (e) {}
                             }
                         }
