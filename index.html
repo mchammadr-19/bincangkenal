@@ -548,14 +548,14 @@
     <div id="modal-player-list"
         class="fixed inset-0 z-[2000] hidden flex flex-col items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity">
         <div
-            class="glass p-6 md:p-8 rounded-[2.5rem] max-w-sm w-full relative animate-fade border border-white/20 shadow-2xl">
+            class="glass p-6 md:p-8 rounded-[2.5rem] max-w-md md:max-w-xl w-full relative animate-fade border border-white/20 shadow-2xl">
             <button onclick="UI.closeModal('modal-player-list')"
                 class="absolute top-4 right-4 bg-white/10 hover:bg-red-500/50 p-2 rounded-full transition-colors"><svg
                     xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2">
                     <path d="M18 6 6 18M6 6l12 12" />
                 </svg></button>
-            <h2 class="text-xl font-bold mb-4 flex items-center gap-2 tracking-wide">
+            <h2 class="text-xl font-bold mb-6 flex items-center gap-2 tracking-wide">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -566,7 +566,7 @@
                 Daftar Pemain
             </h2>
             <div id="host-player-list-container"
-                class="space-y-2 text-sm leading-relaxed custom-scroll max-h-[50vh] overflow-y-auto w-full pr-1">
+                class="flex flex-wrap gap-3 justify-start items-center text-sm leading-relaxed custom-scroll max-h-[50vh] overflow-y-auto w-full pr-1 pb-2">
                 <!-- List Pemain dimuat lewat JS -->
             </div>
         </div>
@@ -1695,7 +1695,7 @@
 
                 const pKeys = Object.keys(State.latestPlayers);
                 if (pKeys.length === 0) {
-                    container.innerHTML = '<p class="text-center opacity-50 py-4">Belum ada pemain yang masuk.</p>';
+                    container.innerHTML = '<p class="text-center opacity-50 py-4 w-full">Belum ada pemain yang masuk.</p>';
                     return;
                 }
 
@@ -1707,15 +1707,15 @@
                     const hasVoted = State.votes?.hasOwnProperty(uid);
                     
                     const el = document.createElement('div');
-                    el.className = `flex justify-between items-center p-4 rounded-2xl border-2 transition-all ${isActive ? 'bg-green-500/30 border-green-400 shadow-[0_0_25px_rgba(34,197,94,0.4)] scale-[1.02]' : 'bg-black/40 border-white/10'}`;
+                    el.className = `flex items-center gap-3 px-4 py-2.5 rounded-full border-2 transition-all ${isActive ? 'bg-green-500/30 border-green-400 shadow-[0_0_20px_rgba(34,197,94,0.3)] scale-[1.02]' : 'bg-black/40 border-white/10'}`;
                     el.innerHTML = `
-                        <div class="flex items-center gap-3 overflow-hidden">
-                            ${isActive ? '<div class="w-2.5 h-2.5 bg-green-400 rounded-full animate-ping absolute opacity-75"></div><div class="w-2.5 h-2.5 bg-green-400 rounded-full relative shadow-[0_0_10px_rgba(74,222,128,0.8)]"></div>' : ''}
-                            <span class="font-black truncate text-sm md:text-base tracking-wider ${isActive ? 'text-white' : 'text-white/60'}">${State.latestPlayers[uid].name}</span>
-                            ${hasVoted ? '<svg class="w-4 h-4 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>' : ''}
+                        <div class="flex items-center gap-2 overflow-hidden max-w-[150px] relative">
+                            ${isActive ? '<div class="w-2 h-2 bg-green-400 rounded-full animate-ping absolute opacity-75"></div><div class="w-2 h-2 bg-green-400 rounded-full relative shadow-[0_0_8px_rgba(74,222,128,0.8)]"></div>' : ''}
+                            <span class="font-black truncate text-xs md:text-sm tracking-wider ${isActive ? 'text-white' : 'text-white/60'}">${State.latestPlayers[uid].name}</span>
+                            ${hasVoted ? '<svg class="w-3.5 h-3.5 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>' : ''}
                         </div>
-                        <button onclick="Multiplayer.kickPlayer('${uid}')" class="text-red-400 hover:text-white hover:bg-red-500 p-2 rounded-lg transition-colors bg-white/5" title="Kick Pemain">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                        <button onclick="Multiplayer.kickPlayer('${uid}')" class="text-red-400 hover:text-white hover:bg-red-500/40 p-1 rounded-full transition-colors bg-white/5 shrink-0" title="Kick Pemain">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
                         </button>
                     `;
                     container.appendChild(el);
@@ -2201,6 +2201,17 @@
                         
                         // Tema Hijau untuk yang terpilih (Pemain aktif saat playing)
                         const isMeActive = isPlaying && (d.currentGreenUid === State.currentUser.uid || d.secondaryGreenUid === State.currentUser.uid);
+                        
+                        // Vibrate if newly activated
+                        const vibrateKey = `${d.currentIndex}_${d.currentGreenUid}_${d.secondaryGreenUid}`;
+                        if (isMeActive && State.lastVibrateKey !== vibrateKey) {
+                            State.lastVibrateKey = vibrateKey;
+                            if (navigator.vibrate) {
+                                try {
+                                    navigator.vibrate([200, 100, 200]);
+                                } catch (e) {}
+                            }
+                        }
                         
                         // Apply Theme
                         let themeClass = isMeActive ? 'theme-green' : 'theme-red';
