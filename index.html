@@ -490,18 +490,9 @@
                 </section>
 
                 <section>
-                    <h3 class="font-bold text-yellow-400 uppercase tracking-widest mb-1">Jenis Kartu</h3>
-                    <p>• <strong>Normal:</strong> Jawab pertanyaan dengan jujur. Di Multiplayer, pemain terpilih akan ditandai layar Hijau.</p>
-                    <p>• <strong>Vote:</strong> Semua pemain memilih satu orang di HP masing-masing. Pemenang vote harus memberikan penjelasan!</p>
-                    <p>• <strong>Wildcard:</strong> Kartu tantangan fisik atau interaksi unik yang harus dilakukan saat itu juga.</p>
-                </section>
-
-                <section>
-                    <h3 class="font-bold text-yellow-400 uppercase tracking-widest mb-1">Kartu Sakti (Multiplayer)</h3>
-                    <p>Beberapa kartu wildcard akan memberimu kekuatan khusus:</p>
-                    <p>• <strong>SKIP:</strong> Melewati pertanyaan yang tidak ingin kamu jawab.</p>
-                    <p>• <strong>LEMPAR:</strong> Menunjuk teman lain untuk menjawab pertanyaanmu (pertanyaan tetap sama).</p>
-                    <p>• <strong>+1:</strong> Mengajak satu teman untuk ikut menjawab pertanyaan bersamamu.</p>
+                    <h3 class="font-bold text-yellow-400 uppercase tracking-widest mb-1">Cara Bermain</h3>
+                    <p>• <strong>Deep Talk:</strong> Jawab pertanyaan dengan jujur dan terbuka. Ini adalah momen untuk saling mengenal lebih dalam.</p>
+                    <p>• <strong>Multiplayer:</strong> Di mode party, setiap pemain akan bergantian terpilih secara acak (ditandai layar Hijau di HP mereka) untuk menjawab pertanyaan yang muncul di layar utama.</p>
                 </section>
 
                 <div class="pt-3 border-t border-white/10 opacity-60 text-[10px]">
@@ -1308,6 +1299,59 @@
         const getRoomsRef = () => collection(db, 'artifacts', 'bincang-kenal', 'public', 'data', 'rooms');
         const getGlobalPoolRef = () => doc(db, 'artifacts', 'bincang-kenal', 'public', 'data', 'global_pool', 'ai_cards');
 
+        // --- SCREEN WAKE LOCK MANAGER ---
+        const WakeLockManager = {
+            wakeLock: null,
+            isSupported: 'wakeLock' in navigator,
+            
+            init: () => {
+                if (!WakeLockManager.isSupported) {
+                    console.log("Wake Lock not supported on this device/browser.");
+                    return;
+                }
+                
+                // Attempt to acquire wake lock automatically on interactions
+                const triggerRequest = () => {
+                    WakeLockManager.request();
+                };
+
+                document.addEventListener('click', triggerRequest, { passive: true });
+                document.addEventListener('touchstart', triggerRequest, { passive: true });
+
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        WakeLockManager.request();
+                    }
+                });
+
+                // Request immediately
+                WakeLockManager.request();
+            },
+
+            request: async () => {
+                if (!WakeLockManager.isSupported) return;
+                if (WakeLockManager.wakeLock !== null) return;
+
+                try {
+                    WakeLockManager.wakeLock = await navigator.wakeLock.request('screen');
+                    WakeLockManager.wakeLock.addEventListener('release', () => {
+                        WakeLockManager.wakeLock = null;
+                    });
+                } catch (err) {
+                    // silently fail as permissions or focus might be missing initially
+                }
+            },
+
+            release: async () => {
+                if (WakeLockManager.wakeLock !== null) {
+                    try {
+                        await WakeLockManager.wakeLock.release();
+                    } catch (e) {}
+                    WakeLockManager.wakeLock = null;
+                }
+            }
+        };
+
         const State = {
             currentUser: null, currentRoomId: null, unsubscribeRoom: null,
             hostInactivityTimer: null, limitMs: 30 * 60 * 1000, isAutoNexting: false,
@@ -1465,48 +1509,9 @@
                 el.className = 'text-2xl md:text-3xl font-medium leading-relaxed tracking-tight transition-all text-white flex flex-wrap justify-center';
             },
             // Animasi Huruf Terbuka / 3D Kinetic Flip
-            animateTextWithFlip: (textString, targetContainer) => {
+            animateTextWithFlip: (textString, targetContainer, startDelay = 0) => {
                 if (!targetContainer) return;
-                targetContainer.innerHTML = '';
-                const words = textString.split(' ');
-                let totalDelay = 0;
-                const staggerMs = 25; // Snappy stagger delay
-
-                words.forEach((word, wordIdx) => {
-                    const wordSpan = document.createElement('span');
-                    wordSpan.className = 'inline-block mr-1.5 mb-1 select-none';
-                    
-                    const characters = word.split('');
-                    characters.forEach((char) => {
-                        const delay = totalDelay * staggerMs;
-                        const letterSpan = document.createElement('span');
-                        letterSpan.className = 'animate-letter-flip opacity-0';
-                        letterSpan.style.animationDelay = `${delay}ms`;
-                        letterSpan.textContent = char;
-                        
-                        // Sinyal suara detak mesin mekanik tiap beberapa karakter
-                        if (totalDelay % 3 === 0) {
-                            setTimeout(() => {
-                                if (window.SFX && typeof window.SFX.play === 'function') {
-                                    window.SFX.play('tick');
-                                }
-                            }, delay);
-                        }
-
-                        wordSpan.appendChild(letterSpan);
-                        totalDelay++;
-                    });
-
-                    // Ruang spasi antar kata
-                    if (wordIdx < words.length - 1) {
-                        const space = document.createElement('span');
-                        space.innerHTML = '&nbsp;';
-                        space.className = 'inline-block';
-                        wordSpan.appendChild(space);
-                    }
-
-                    targetContainer.appendChild(wordSpan);
-                });
+                targetContainer.textContent = textString;
             }
         };
 
@@ -1550,10 +1555,11 @@
 
         // --- 5. LOCAL GAME MANAGER ---
         const Game = {
-            deck: [], idx: 0, isAnim: false,
-            updateCard: (side, cardObj) => {
+            deck: [], idx: 0, isAnim: false, rot: 0,
+            updateCard: (side, cardObj, startDelay = 0) => {
                 if (!cardObj) return;
                 const el = document.getElementById(`local-card-${side}`), txt = document.getElementById(`local-text-${side}`);
+                if (!el || !txt) return;
                 
                 el.classList.remove('wildcard-bg', 'vote-bg', 'card-glass');
                 if (cardObj.t === 'wildcard') el.classList.add('wildcard-bg');
@@ -1564,11 +1570,11 @@
                     const icon = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mb-4 text-white/80"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
                     txt.innerHTML = `<div class="flex flex-col items-center">${icon}<div class="text-container"></div></div>`;
                     const textContainer = txt.querySelector('.text-container');
-                    Utils.animateTextWithFlip(cardObj.text, textContainer);
+                    Utils.animateTextWithFlip(cardObj.text, textContainer, startDelay);
                 } else {
                     txt.innerHTML = `<div class="text-container"></div>`;
                     const textContainer = txt.querySelector('.text-container');
-                    Utils.animateTextWithFlip(cardObj.text, textContainer);
+                    Utils.animateTextWithFlip(cardObj.text, textContainer, startDelay);
                 }
 
                 Utils.applyDynamicFont(txt, cardObj.text);
@@ -1590,42 +1596,17 @@
                     // Shuffle base cards first
                     baseCards = Utils.shuffle(baseCards);
 
-                    // Tambahkan beberapa wildcard reguler (non-sakti) ke base deck (sekitar 15%)
-                    const regularWilds = window.AppData.wildcards.filter(w => !['skip', 'throw', 'plus1'].includes(w.id));
-                    const regWildCount = Math.floor(baseCards.length * 0.15);
-                    for (let i = 0; i < regWildCount; i++) {
-                        const rw = regularWilds[Math.floor(Math.random() * regularWilds.length)];
-                        baseCards.push({ t: 'wildcard', sub: rw.id, text: rw.text });
-                    }
-                    baseCards = Utils.shuffle(baseCards);
-
-                    // Pisahkan dek dasar menjadi 75% awal dan 25% akhir
-                    const splitIndex = Math.ceil(baseCards.length * 0.75);
-                    let earlyBase = baseCards.slice(0, splitIndex);
-                    let lateBase = baseCards.slice(splitIndex);
-
-                    // Buat Kartu Sakti hanya di 75% awal dengan rasio 3 banding 16 terhadap earlyBase
-                    const powerupCount = Math.max(1, Math.round(earlyBase.length * (3 / 16)));
-                    const powerupTypes = window.AppData.wildcards.filter(w => ['skip', 'throw', 'plus1'].includes(w.id));
-                    
-                    let powerupsToAdd = [];
-                    for (let i = 0; i < powerupCount; i++) {
-                        const pt = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
-                        powerupsToAdd.push({ t: 'wildcard', sub: pt.id, text: pt.text });
-                    }
-
-                    // Gabungkan dan acak fase awal
-                    let earlyDeck = Utils.shuffle([...earlyBase, ...powerupsToAdd]);
-
-                    // Satukan dek akhir
-                    let finalDeck = [...earlyDeck, ...lateBase];
-
-                    Game.deck = finalDeck;
+                    Game.deck = baseCards;
                     Game.idx = 0;
                 }
                 Game.isAnim = false;
-                Game.updateCard('front', Game.deck[Game.idx]);
-                if (Game.deck[Game.idx + 1]) Game.updateCard('back', Game.deck[Game.idx + 1]);
+                Game.rot = 0;
+                Game.updateCard('front', Game.deck[Game.idx], 0);
+                const backEl = document.getElementById('local-card-back');
+                if (backEl) {
+                    backEl.innerHTML = '<div id="local-text-back" class="transition-all"></div>';
+                }
+                
                 document.getElementById('local-counter').innerText = `${Game.deck.length - Game.idx} Sisa`;
                 document.getElementById('local-card-inner').style.setProperty('--rot', `0deg`);
                 localStorage.setItem('bincang_local_state', JSON.stringify({ deck: Game.deck, idx: Game.idx }));
@@ -1635,33 +1616,65 @@
                 if (Game.isAnim) return; Game.isAnim = true; Game.idx++; SFX.play('flip');
                 if (Game.idx >= Game.deck.length) { UI.showToast("Mengacak ulang..."); Game.startLocal(false); return; }
                 document.getElementById('local-counter').innerText = `${Game.deck.length - Game.idx} Sisa`;
+                
+                Game.updateCard('back', Game.deck[Game.idx], 200);
                 const inner = document.getElementById('local-card-inner');
-                inner.style.setProperty('--rot', '180deg');
-                if (Game.deck[Game.idx].t === 'wildcard') setTimeout(() => { confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } }); SFX.play('wildcard'); }, 300);
+                if (inner) inner.style.setProperty('--rot', '180deg');
+                
+                if (Game.deck[Game.idx].t === 'wildcard') {
+                    setTimeout(() => { confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } }); SFX.play('wildcard'); }, 300);
+                }
                 localStorage.setItem('bincang_local_state', JSON.stringify({ deck: Game.deck, idx: Game.idx }));
                 setTimeout(() => {
-                    Game.updateCard('front', Game.deck[Game.idx]);
-                    if (Game.deck[Game.idx + 1]) Game.updateCard('back', Game.deck[Game.idx + 1]);
-                    inner.style.transition = 'none';
-                    inner.style.setProperty('--rot', '0deg');
-                    inner.offsetHeight;
-                    inner.style.transition = '';
+                    const frontEl = document.getElementById('local-card-front');
+                    const backEl = document.getElementById('local-card-back');
+                    const frontTxt = document.getElementById('local-text-front');
+                    const backTxt = document.getElementById('local-text-back');
+                    if (frontTxt && backTxt) {
+                        frontTxt.innerHTML = backTxt.innerHTML;
+                        frontTxt.className = backTxt.className;
+                    }
+                    if (frontEl && backEl) {
+                        frontEl.className = backEl.className.replace('card-back', '');
+                    }
+                    
+                    if (inner) {
+                        inner.style.transition = 'none';
+                        inner.style.setProperty('--rot', '0deg');
+                        inner.offsetHeight;
+                        inner.style.transition = '';
+                    }
                     Game.isAnim = false;
                 }, 700);
             },
             prevLocalCard: () => {
                 if (Game.isAnim || Game.idx <= 0) return; Game.isAnim = true; Game.idx--; SFX.play('flip');
                 document.getElementById('local-counter').innerText = `${Game.deck.length - Game.idx} Sisa`;
+                
+                Game.updateCard('back', Game.deck[Game.idx], 200);
                 const inner = document.getElementById('local-card-inner');
-                inner.style.setProperty('--rot', '-180deg');
+                if (inner) inner.style.setProperty('--rot', '-180deg');
+                
                 localStorage.setItem('bincang_local_state', JSON.stringify({ deck: Game.deck, idx: Game.idx }));
                 setTimeout(() => {
-                    Game.updateCard('front', Game.deck[Game.idx]);
-                    if (Game.deck[Game.idx + 1]) Game.updateCard('back', Game.deck[Game.idx + 1]);
-                    inner.style.transition = 'none';
-                    inner.style.setProperty('--rot', '0deg');
-                    inner.offsetHeight;
-                    inner.style.transition = '';
+                    const frontEl = document.getElementById('local-card-front');
+                    const backEl = document.getElementById('local-card-back');
+                    const frontTxt = document.getElementById('local-text-front');
+                    const backTxt = document.getElementById('local-text-back');
+                    if (frontTxt && backTxt) {
+                        frontTxt.innerHTML = backTxt.innerHTML;
+                        frontTxt.className = backTxt.className;
+                    }
+                    if (frontEl && backEl) {
+                        frontEl.className = backEl.className.replace('card-back', '');
+                    }
+                    
+                    if (inner) {
+                        inner.style.transition = 'none';
+                        inner.style.setProperty('--rot', '0deg');
+                        inner.offsetHeight;
+                        inner.style.transition = '';
+                    }
                     Game.isAnim = false;
                 }, 700);
             }
@@ -1738,19 +1751,27 @@
                 } catch (e) { }
             },
             listenHostLobby: () => {
-                onSnapshot(doc(getRoomsRef(), State.currentRoomId), (snap) => {
+                if (State.unsubscribeRoom) { State.unsubscribeRoom(); State.unsubscribeRoom = null; }
+                State.unsubscribeRoom = onSnapshot(doc(getRoomsRef(), State.currentRoomId), (snap) => {
+                    if (!State.currentRoomId) return;
                     if (!snap.exists()) return; const data = snap.data(); const pKeys = Object.keys(data.players);
-                    document.getElementById('host-player-count').innerText = pKeys.length;
+                    const countEl = document.getElementById('host-player-count');
+                    if (countEl) countEl.innerText = pKeys.length;
                     Multiplayer.renderPlayerList(data.players); // Render List
-                    const container = document.getElementById('floating-players'); container.innerHTML = '';
-                    pKeys.forEach((uid, i) => {
-                        const el = document.createElement('button'); el.className = 'floating-name'; el.innerText = data.players[uid].name;
-                        el.style.top = `${20 + (i * 15) % 60}%`; el.style.left = i % 2 === 0 ? '10%' : 'auto'; el.style.right = i % 2 !== 0 ? '10%' : 'auto'; el.style.animationDelay = `${i * 0.5}s`;
-                        el.title = "Keluarkan pemain"; el.onclick = () => Multiplayer.kickPlayer(uid);
-                        container.appendChild(el);
-                    });
+                    const container = document.getElementById('floating-players');
+                    if (container) {
+                        container.innerHTML = '';
+                        pKeys.forEach((uid, i) => {
+                            const el = document.createElement('button'); el.className = 'floating-name'; el.innerText = data.players[uid].name;
+                            el.style.top = `${20 + (i * 15) % 60}%`; el.style.left = i % 2 === 0 ? '10%' : 'auto'; el.style.right = i % 2 !== 0 ? '10%' : 'auto'; el.style.animationDelay = `${i * 0.5}s`;
+                            el.title = "Keluarkan pemain"; el.onclick = () => Multiplayer.kickPlayer(uid);
+                            container.appendChild(el);
+                        });
+                    }
                     const btn = document.getElementById('btn-start-host');
-                    btn.classList.toggle('opacity-50', pKeys.length === 0); btn.classList.toggle('pointer-events-none', pKeys.length === 0);
+                    if (btn) {
+                        btn.classList.toggle('opacity-50', pKeys.length === 0); btn.classList.toggle('pointer-events-none', pKeys.length === 0);
+                    }
 
                     // Sync toggle UI
                     const toggle = document.getElementById('vote-only-toggle');
@@ -1772,49 +1793,28 @@
                     let activeQ = [...window.AppData.defaultQuestions, ...window.AppData.aiQuestions];
                     if (activeQ.length === 0) activeQ = ["Kumpulan kartu kosong!"];
 
-                    // Convert each question to a normal question card
-                    let questionCards = activeQ.map(q => ({
+                    // Convert each question to a normal question card and shuffle
+                    let finalDeck = Utils.shuffle(activeQ.map(q => ({
                         t: 'normal',
                         text: q
-                    }));
+                    })));
 
-                    // Add wildcards every once in a while (~15% of total questions)
-                    const wildcardPool = [...window.AppData.wildcards];
-                    let finalDeck = [];
-                    if (wildcardPool.length > 0) {
-                        const numWildcards = Math.max(1, Math.floor(questionCards.length * 0.15));
-                        questionCards = Utils.shuffle(questionCards);
-                        
-                        let wildcardsToInsert = [];
-                        for (let i = 0; i < numWildcards; i++) {
-                            const wc = wildcardPool[Math.floor(Math.random() * wildcardPool.length)];
-                            wildcardsToInsert.push({
-                                t: 'wildcard',
-                                sub: wc.id,
-                                text: wc.text
-                            });
-                        }
-                        
-                        // Merge them non-sequentially
-                        finalDeck = [...questionCards];
-                        wildcardsToInsert.forEach(wc => {
-                            const randPos = Math.floor(Math.random() * (finalDeck.length + 1));
-                            finalDeck.splice(randPos, 0, wc);
-                        });
-                    } else {
-                        finalDeck = Utils.shuffle(questionCards);
-                    }
-
-                    const firstCard = finalDeck[0];
                     let queue = Utils.shuffle([...pKeys]);
                     const firstGreenUid = queue.pop() || pKeys[0] || null;
+
+                    let players = snap.data().players;
+                    Object.keys(players).forEach(uid => {
+                        players[uid].skips = 1;
+                        players[uid].throws = 1;
+                        players[uid].plus1s = 1;
+                    });
 
                     let initialData = {
                         deck: finalDeck,
                         currentIndex: 0,
                         secondaryGreenUid: null,
                         winnerUid: null,
-                        players: snap.data().players,
+                        players: players,
                         flashEndTime: Date.now() + 3000,
                         lastActive: Date.now(),
                         playerQueue: queue,
@@ -1822,25 +1822,16 @@
                         currentGreenUid: firstGreenUid
                     };
 
-                    if (firstCard.t === 'wildcard') {
-                        let players = snap.data().players;
-                        if (firstCard.sub === 'skip' && players[firstGreenUid]) {
-                            players[firstGreenUid].skips = (players[firstGreenUid].skips || 0) + 1;
-                        } else if (firstCard.sub === 'throw' && players[firstGreenUid]) {
-                            players[firstGreenUid].throws = (players[firstGreenUid].throws || 0) + 1;
-                        } else if (firstCard.sub === 'plus1' && players[firstGreenUid]) {
-                            players[firstGreenUid].plus1s = (players[firstGreenUid].plus1s || 0) + 1;
-                        }
-                        initialData.players = players;
-                    }
-
                     await updateDoc(doc(getRoomsRef(), State.currentRoomId), initialData);
                     Multiplayer.resetTimer();
+                    Multiplayer.lastIdxHost = -1;
+                    Multiplayer.isHostAnim = false;
                     document.getElementById('host-arena-room-code').innerText = State.currentRoomId;
                     UI.switch('screen-host-arena'); Multiplayer.listenHostArena();
                 } catch (e) { UI.showToast("Gagal memulai."); }
             },
             endHostGame: async () => {
+                if (State.unsubscribeRoom) { State.unsubscribeRoom(); State.unsubscribeRoom = null; }
                 if (State.currentRoomId) {
                     try { await deleteDoc(doc(getRoomsRef(), State.currentRoomId)); } catch (e) { }
                 }
@@ -1848,30 +1839,42 @@
                 UI.switch('screen-main-menu');
             },
 
-            lastIdxHost: -1, lastStatusHost: '',
-            updateHostCard: (side, cardObj) => {
+            lastIdxHost: -1, lastStatusHost: '', isHostAnim: false, lastRenderedText: '', lastRenderedActiveName: '',
+            updateHostCard: (side, cardObj, activeName = 'Pemain', startDelay = 0) => {
                 if (!cardObj) return;
                 const el = document.getElementById(`host-arena-${side}`), txt = document.getElementById(`host-text-${side}`);
+                if (!el || !txt) return;
                 
                 el.classList.remove('wildcard-bg', 'card-glass');
                 if (cardObj.t === 'wildcard') el.classList.add('wildcard-bg');
                 else el.classList.add('card-glass');
 
-                if (cardObj.t === 'wildcard') {
-                    const icon = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mb-6 text-white/80"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
-                    txt.innerHTML = `<div class="flex flex-col items-center">${icon}<div class="text-container"></div></div>`;
-                    const textContainer = txt.querySelector('.text-container');
-                    Utils.animateTextWithFlip(cardObj.text, textContainer);
-                } else {
-                    txt.innerHTML = `<div class="text-container"></div>`;
-                    const textContainer = txt.querySelector('.text-container');
-                    Utils.animateTextWithFlip(cardObj.text, textContainer);
-                }
+                const isWild = cardObj.t === 'wildcard';
+                const headerText = isWild ? `KARTU SAKTI UNTUK ${activeName.toUpperCase()}` : `GILIRAN ${activeName.toUpperCase()} MENJAWAB`;
+                const headerColorClass = isWild ? 'text-purple-400 animate-bounce' : 'text-green-400 animate-pulse';
+                const iconHtml = isWild ? '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mb-4 text-white/80"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>' : '';
 
+                txt.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-6 px-2">
+                        <span class="text-xs md:text-sm font-black uppercase tracking-[0.3em] ${headerColorClass} mb-6">${headerText}</span>
+                        ${iconHtml}
+                        <div class="text-container text-xl md:text-3xl lg:text-4xl font-extrabold leading-relaxed text-white"></div>
+                    </div>
+                `;
+
+                const textContainer = txt.querySelector('.text-container');
+                Utils.animateTextWithFlip(cardObj.text, textContainer, startDelay);
                 Utils.applyDynamicFont(txt, cardObj.text);
+
+                if (side === 'front') {
+                    Multiplayer.lastRenderedText = cardObj.text;
+                    Multiplayer.lastRenderedActiveName = activeName;
+                }
             },
             listenHostArena: () => {
-                onSnapshot(doc(getRoomsRef(), State.currentRoomId), (snap) => {
+                if (State.unsubscribeRoom) { State.unsubscribeRoom(); State.unsubscribeRoom = null; }
+                State.unsubscribeRoom = onSnapshot(doc(getRoomsRef(), State.currentRoomId), (snap) => {
+                    if (!State.currentRoomId) return;
                     if (!snap.exists()) return; const data = snap.data();
                     
                     UI.els.mainBody.className = `p-4 md:p-8 pt-[env(safe-area-inset-top,1rem)] pb-[env(safe-area-inset-bottom,1rem)]`;
@@ -1883,70 +1886,85 @@
                     State.activeUids = activeUids;
                     State.votes = {};
                     
-                    document.getElementById('host-arena-counter').innerText = `${data.deck.length - data.currentIndex} Sisa`;
+                    const counterEl = document.getElementById('host-arena-counter');
+                    if (counterEl) counterEl.innerText = `${data.deck.length - data.currentIndex} Sisa`;
                     Multiplayer.renderPlayerList(data.players); 
 
                     // Bersihkan floating names di Arena agar layar bersih (pindah ke Daftar Pemain)
                     const container = document.getElementById('arena-floating-players');
                     if (container) container.innerHTML = '';
 
-                    if (data.currentIndex !== Multiplayer.lastIdxHost) {
-                        SFX.play('flip');
-                        const currentCard = data.deck[data.currentIndex];
-                        const hostInner = document.getElementById('host-arena-inner');
-                        hostInner.style.setProperty('--rot', '180deg');
-                        Multiplayer.lastIdxHost = data.currentIndex;
-
-                        if (currentCard.t === 'wildcard') {
-                            setTimeout(() => {
-                                confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
-                                SFX.play('wildcard');
-                            }, 300);
-                        }
-
-                        setTimeout(() => {
-                            Multiplayer.updateHostCard('front', currentCard);
-                            hostInner.style.transition = 'none';
-                            hostInner.style.setProperty('--rot', '0deg');
-                            hostInner.offsetHeight;
-                            hostInner.style.transition = '';
-                        }, 700);
-                    }
-
-                    const sideEl = document.getElementById('host-text-front');
-                    
-                    // Reset card visibility on both faces
-                    const frontFace = document.getElementById('host-arena-front');
-                    const backFace = document.getElementById('host-arena-back');
-                    frontFace.classList.remove('hide-card');
-                    backFace.classList.remove('hide-card');
-
-                    const cardContainer = document.querySelector('#screen-host-arena .card-container');
-                    cardContainer.classList.toggle('no-box-mode', false);
-
                     const currentCard = data.deck[data.currentIndex];
                     const activeName = data.players[data.currentGreenUid]?.name || 'Pemain';
 
-                    if (currentCard && currentCard.t === 'wildcard') {
-                        sideEl.innerHTML = `
-                            <div class="flex flex-col items-center justify-center animate-fade py-6 px-2">
-                                <span class="text-xs md:text-sm font-black uppercase tracking-[0.3em] text-purple-400 mb-6 animate-bounce">KARTU SAKTI UNTUK ${activeName.toUpperCase()}</span>
-                                <div class="text-container text-xl md:text-3xl lg:text-4xl font-extrabold leading-relaxed text-white"></div>
-                            </div>
-                        `;
-                    } else {
-                        sideEl.innerHTML = `
-                            <div class="flex flex-col items-center justify-center animate-fade py-6 px-2">
-                                <span class="text-xs md:text-sm font-black uppercase tracking-[0.3em] text-green-400 mb-6 animate-pulse">GILIRAN ${activeName.toUpperCase()} MENJAWAB</span>
-                                <div class="text-container text-xl md:text-3xl lg:text-4xl font-extrabold leading-relaxed text-white"></div>
-                            </div>
-                        `;
+                    if (data.currentIndex !== Multiplayer.lastIdxHost) {
+                        const isFirstLoad = Multiplayer.lastIdxHost === -1;
+                        Multiplayer.isHostAnim = !isFirstLoad;
+                        Multiplayer.lastIdxHost = data.currentIndex;
+
+                        if (isFirstLoad) {
+                            Multiplayer.updateHostCard('front', currentCard, activeName, 0);
+                            const hostInner = document.getElementById('host-arena-inner');
+                            if (hostInner) hostInner.style.setProperty('--rot', '0deg');
+                            Multiplayer.isHostAnim = false;
+                        } else {
+                            SFX.play('flip');
+                            
+                            // Load the next card content on the back face of the card
+                            Multiplayer.updateHostCard('back', currentCard, activeName, 200);
+
+                            const hostInner = document.getElementById('host-arena-inner');
+                            if (hostInner) hostInner.style.setProperty('--rot', '180deg');
+
+                            if (currentCard && currentCard.t === 'wildcard') {
+                                setTimeout(() => {
+                                    confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+                                    SFX.play('wildcard');
+                                }, 300);
+                            }
+
+                            setTimeout(() => {
+                                // Once the flip transition is completed, put the new card content on the front face,
+                                // and reset the rotation angle back to 0deg instantaneously so it is ready for the next flip.
+                                Multiplayer.updateHostCard('front', currentCard, activeName, 0);
+
+                                if (hostInner) {
+                                    hostInner.style.transition = 'none';
+                                    hostInner.style.setProperty('--rot', '0deg');
+                                    hostInner.offsetHeight; // force reflow
+                                    hostInner.style.transition = '';
+                                }
+                                Multiplayer.isHostAnim = false;
+                            }, 700);
+                        }
                     }
 
-                    const textContainer = sideEl.querySelector('.text-container');
-                    Utils.animateTextWithFlip(currentCard.text, textContainer);
-                    Utils.applyDynamicFont(sideEl, currentCard.text);
-                    document.getElementById('host-next-label').innerText = "Lanjut";
+                    if (!Multiplayer.isHostAnim) {
+                        // Reset card visibility on both faces
+                        const frontFace = document.getElementById('host-arena-front');
+                        const backFace = document.getElementById('host-arena-back');
+                        if (frontFace) frontFace.classList.remove('hide-card');
+                        if (backFace) backFace.classList.remove('hide-card');
+
+                        const cardContainer = document.querySelector('#screen-host-arena .card-container');
+                        if (cardContainer) cardContainer.classList.toggle('no-box-mode', false);
+
+                        const faceEl = document.getElementById('host-arena-front');
+                        const textContainer = faceEl ? faceEl.querySelector('.text-container') : null;
+                        const currentTextInDom = textContainer ? textContainer.textContent.trim() : '';
+
+                        const headerSpan = faceEl ? faceEl.querySelector('span') : null;
+                        const currentHeaderInDom = headerSpan ? headerSpan.textContent.trim() : '';
+                        const isWild = currentCard && currentCard.t === 'wildcard';
+                        const expectedHeader = currentCard ? (isWild ? `KARTU SAKTI UNTUK ${activeName.toUpperCase()}` : `GILIRAN ${activeName.toUpperCase()} MENJAWAB`) : '';
+
+                        if (currentCard && (currentTextInDom !== currentCard.text.trim() || currentHeaderInDom !== expectedHeader)) {
+                            Multiplayer.updateHostCard('front', currentCard, activeName, 0);
+                        }
+                    }
+
+                    const nextLabelEl = document.getElementById('host-next-label');
+                    if (nextLabelEl) nextLabelEl.innerText = "Lanjut";
 
                     // Manajemen Timer Live 30s & Sound Detak (Always hidden since there is no voting)
                     if (Multiplayer.voteInterval) clearInterval(Multiplayer.voteInterval);
@@ -2085,16 +2103,6 @@
                 const nextGreenUid = queue.pop() || pKeys[0] || null;
                 let players = data.players || {};
 
-                if (nextCard.t === 'wildcard') {
-                    if (nextCard.sub === 'skip' && players[nextGreenUid]) {
-                        players[nextGreenUid].skips = (players[nextGreenUid].skips || 0) + 1;
-                    } else if (nextCard.sub === 'throw' && players[nextGreenUid]) {
-                        players[nextGreenUid].throws = (players[nextGreenUid].throws || 0) + 1;
-                    } else if (nextCard.sub === 'plus1' && players[nextGreenUid]) {
-                        players[nextGreenUid].plus1s = (players[nextGreenUid].plus1s || 0) + 1;
-                    }
-                }
-
                 await updateDoc(ref, { 
                     currentIndex: nxt, 
                     status: 'playing', 
@@ -2115,7 +2123,14 @@
                 try {
                     const ref = doc(getRoomsRef(), c); const snap = await getDoc(ref);
                     if (!snap.exists() || snap.data().status === 'ended') return UI.showToast("Ruangan 404/Sudah berakhir!");
-                    const ps = snap.data().players; ps[State.currentUser.uid] = { name: n, skips: 0 };
+                    const ps = snap.data().players;
+                    const existing = ps[State.currentUser.uid] || {};
+                    ps[State.currentUser.uid] = {
+                        name: n,
+                        skips: existing.skips !== undefined ? existing.skips : 1,
+                        throws: existing.throws !== undefined ? existing.throws : 1,
+                        plus1s: existing.plus1s !== undefined ? existing.plus1s : 1
+                    };
                     await updateDoc(ref, { players: ps }); State.currentRoomId = c;
                     localStorage.setItem('bincang_session', JSON.stringify({ uid: State.currentUser.uid, roomId: c }));
                     document.getElementById('wait-guest-name').innerText = n; UI.switch('screen-guest-wait'); Multiplayer.listenGuest();
@@ -2139,6 +2154,7 @@
 
                     const sView = document.getElementById('guest-status-view');
                     const vView = document.getElementById('guest-vote-view');
+                    if (!sView || !vView) return;
 
                     if (d.status === 'lobby') {
                         UI.switch('screen-guest-wait');
@@ -2176,22 +2192,45 @@
                             }
 
                             let buttonsHtml = '';
-                            if (isMain && currentCard && currentCard.t === 'normal') {
+                            if (isMain && currentCard) {
                                 const pData = d.players[State.currentUser.uid];
-                                if (pData && pData.skips > 0) {
-                                    buttonsHtml += `<button onclick="Multiplayer.useSkip()" class="w-full max-w-xs bg-[#F2C94C] hover:bg-[#F2C94C]/80 text-black px-6 py-4 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(242,201,76,0.3)] border-2 border-white/20">
-                                        Gunakan SKIP (${pData.skips})
-                                    </button>`;
-                                }
-                                if (pData && pData.throws > 0) {
-                                    buttonsHtml += `<button onclick="Multiplayer.useThrow()" class="w-full max-w-xs bg-blue-500 hover:bg-blue-600 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(59,130,246,0.3)] border-2 border-white/20">
-                                        Gunakan LEMPAR (${pData.throws})
-                                    </button>`;
-                                }
-                                if (pData && pData.plus1s > 0) {
-                                    buttonsHtml += `<button onclick="Multiplayer.usePlus1()" class="w-full max-w-xs bg-purple-500 hover:bg-purple-600 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(168,85,247,0.3)] border-2 border-white/20">
-                                        Gunakan BERSAMA (${pData.plus1s})
-                                    </button>`;
+                                if (pData) {
+                                    const hasSkip = (pData.skips || 0) > 0;
+                                    const hasThrow = (pData.throws || 0) > 0;
+                                    const hasPlus1 = (pData.plus1s || 0) > 0;
+
+                                    // Skip Button
+                                    if (hasSkip) {
+                                        buttonsHtml += `<button onclick="Multiplayer.useSkip()" class="w-full max-w-xs bg-amber-400 hover:bg-amber-500 text-slate-950 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(245,158,11,0.3)] border-2 border-white/20 transition-all active:scale-95">
+                                            SKIP: Lewati Pertanyaan
+                                        </button>`;
+                                    } else {
+                                        buttonsHtml += `<button disabled class="w-full max-w-xs bg-white/5 text-white/30 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest border border-white/5 cursor-not-allowed opacity-50">
+                                            SKIP: Terpakai
+                                        </button>`;
+                                    }
+
+                                    // +1 Button
+                                    if (hasPlus1) {
+                                        buttonsHtml += `<button onclick="Multiplayer.usePlus1()" class="w-full max-w-xs bg-purple-500 hover:bg-purple-600 text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(168,85,247,0.3)] border-2 border-white/20 transition-all active:scale-95">
+                                            +1: Ajak Teman
+                                        </button>`;
+                                    } else {
+                                        buttonsHtml += `<button disabled class="w-full max-w-xs bg-white/5 text-white/30 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest border border-white/5 cursor-not-allowed opacity-50">
+                                            +1: Terpakai
+                                        </button>`;
+                                    }
+
+                                    // Throw Button
+                                    if (hasThrow) {
+                                        buttonsHtml += `<button onclick="Multiplayer.useThrow()" class="w-full max-w-xs bg-blue-500 hover:bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(59,130,246,0.3)] border-2 border-white/20 transition-all active:scale-95">
+                                            THROW: Lempar Pertanyaan
+                                        </button>`;
+                                    } else {
+                                        buttonsHtml += `<button disabled class="w-full max-w-xs bg-white/5 text-white/30 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest border border-white/5 cursor-not-allowed opacity-50">
+                                            THROW: Terpakai
+                                        </button>`;
+                                    }
                                 }
                             }
 
@@ -2224,7 +2263,8 @@
             }
         };
 
-        window.UI = UI; window.Game = Game; window.AIManager = AIManager; window.Multiplayer = Multiplayer;
+        window.UI = UI; window.Game = Game; window.AIManager = AIManager; window.Multiplayer = Multiplayer; window.WakeLockManager = WakeLockManager;
+        WakeLockManager.init();
         const uP = new URLSearchParams(window.location.search); const rC = uP.get('room');
         if (rC) { UI.openPartyMenu(); UI.switch('screen-guest-join'); setTimeout(() => { const c = document.getElementById('guest-code'); if (c) c.value = rC.toUpperCase(); }, 100); }
 
