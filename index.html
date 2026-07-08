@@ -1357,7 +1357,8 @@
             hostInactivityTimer: null, limitMs: 30 * 60 * 1000, isAutoNexting: false,
             isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768,
             latestPlayers: {},
-            adminState: { defQ: [], defV: [], aiQ: [], aiV: [] }
+            adminState: { defQ: [], defV: [], aiQ: [], aiV: [] },
+            lastUsedPowerupIndex: -1
         };
 
         const syncGlobalCards = async () => {
@@ -1976,29 +1977,48 @@
 
                     // Handle Powerup Request from Player
                     if (data.powerupRequested && State.currentUser.uid === data.hostId) {
-                        const skipPlayerName = data.players[data.currentGreenUid]?.name || "Seorang pemain";
-                        const targetName = data.players[data.powerupTarget]?.name || "Seorang pemain";
+                        const playerA = (data.players[data.currentGreenUid]?.name || "Seorang pemain").toUpperCase();
+                        const playerB = (data.players[data.powerupTarget]?.name || "Seorang pemain").toUpperCase();
                         const type = data.powerupRequested; 
                         
-                        let label = 'MENGGUNAKAN KARTU SAKTI';
-                        let subLabel = '';
-                        if (type === 'skip') { label = 'MELEWATI PERTANYAAN'; }
-                        else if (type === 'throw') { label = 'MELEMPAR PERTANYAAN'; subLabel = `KEPADA ${targetName.toUpperCase()}`; }
-                        else if (type === 'plus1') { label = 'MENGAJAK MENJAWAB'; subLabel = `BERSAMA ${targetName.toUpperCase()}`; }
+                        let popupHtml = '';
+                        if (type === 'skip') {
+                            popupHtml = `
+                                <h1 class="text-3xl md:text-5xl font-black text-white leading-snug tracking-wide uppercase">
+                                    <span class="text-yellow-400">${playerA}</span> MELEWATI PERTANYAAN
+                                </h1>
+                            `;
+                        } else if (type === 'plus1') {
+                            popupHtml = `
+                                <h1 class="text-3xl md:text-5xl font-black text-white leading-snug tracking-wide uppercase mb-4">
+                                    <span class="text-yellow-400">${playerA}</span> MENGAJAK <span class="text-purple-400">${playerB}</span>
+                                </h1>
+                                <p class="text-lg md:text-xl font-bold text-white/60 tracking-[0.2em] uppercase">
+                                    untuk menjawab pertanyaan
+                                </p>
+                            `;
+                        } else if (type === 'throw') {
+                            popupHtml = `
+                                <h1 class="text-3xl md:text-5xl font-black text-white leading-snug tracking-wide uppercase mb-4">
+                                    <span class="text-yellow-400">${playerA}</span> MELEMPAR <span class="text-blue-400">${playerB}</span>
+                                </h1>
+                                <p class="text-lg md:text-xl font-bold text-white/60 tracking-[0.2em] uppercase">
+                                    untuk menjawab pertanyaan
+                                </p>
+                            `;
+                        }
 
                         // Buat Popup Besar
                         const overlay = document.createElement('div');
-                        overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xl animate-fade';
+                        overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-2xl animate-fade';
                         overlay.innerHTML = `
-                            <div class="glass p-12 rounded-[4rem] border-2 border-yellow-500/50 text-center shadow-[0_0_150px_rgba(234,179,8,0.6)] transform scale-110">
-                                <div class="flex justify-center mb-6">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2">
+                            <div class="glass p-16 rounded-[4rem] border-2 border-yellow-500/50 text-center shadow-[0_0_150px_rgba(234,179,8,0.5)] transform scale-100 max-w-4xl mx-6 transition-all duration-300">
+                                <div class="flex justify-center mb-8 animate-bounce">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2">
                                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                                     </svg>
                                 </div>
-                                <h1 class="text-4xl font-black uppercase tracking-widest text-white mb-2">${skipPlayerName}</h1>
-                                <p class="text-xl font-bold text-yellow-400 uppercase tracking-[0.2em]">${label}</p>
-                                ${subLabel ? `<p class="text-sm font-black text-white/60 mt-3 tracking-[0.3em]">${subLabel}</p>` : ''}
+                                ${popupHtml}
                             </div>
                         `;
                         document.body.appendChild(overlay);
@@ -2028,6 +2048,10 @@
                 const snap = await getDoc(ref);
                 if (!snap.exists()) return;
                 const d = snap.data();
+                if (State.lastUsedPowerupIndex === d.currentIndex) {
+                    UI.showToast("Kamu sudah menggunakan Kartu Sakti giliran ini!");
+                    return;
+                }
                 const myData = d.players[State.currentUser.uid];
                 
                 let count = 0;
@@ -2041,6 +2065,8 @@
                     else if (type === 'throw') ps[State.currentUser.uid].throws--;
                     else if (type === 'plus1') ps[State.currentUser.uid].plus1s--;
                     
+                    State.lastUsedPowerupIndex = d.currentIndex;
+                    
                     await updateDoc(ref, { 
                         players: ps, 
                         powerupRequested: type, 
@@ -2052,7 +2078,13 @@
             },
             showTargetPicker: async (type) => {
                 const snap = await getDoc(doc(getRoomsRef(), State.currentRoomId));
-                const players = snap.data().players;
+                if (!snap.exists()) return;
+                const d = snap.data();
+                if (State.lastUsedPowerupIndex === d.currentIndex) {
+                    UI.showToast("Kamu sudah menggunakan Kartu Sakti giliran ini!");
+                    return;
+                }
+                const players = d.players;
                 const list = document.getElementById('powerup-target-list');
                 list.innerHTML = '';
                 
@@ -2198,37 +2230,62 @@
                                     const hasSkip = (pData.skips || 0) > 0;
                                     const hasThrow = (pData.throws || 0) > 0;
                                     const hasPlus1 = (pData.plus1s || 0) > 0;
+                                    const hasUsedPowerupThisTurn = State.lastUsedPowerupIndex === d.currentIndex;
 
                                     // Skip Button
                                     if (hasSkip) {
-                                        buttonsHtml += `<button onclick="Multiplayer.useSkip()" class="w-full max-w-xs bg-amber-400 hover:bg-amber-500 text-slate-950 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(245,158,11,0.3)] border-2 border-white/20 transition-all active:scale-95">
-                                            SKIP: Lewati Pertanyaan
-                                        </button>`;
+                                        if (hasUsedPowerupThisTurn) {
+                                            buttonsHtml += `<button disabled class="flex flex-col items-center justify-center bg-white/5 text-white/30 py-2.5 px-2 rounded-xl font-black uppercase tracking-wider border border-white/5 cursor-not-allowed opacity-40 w-full">
+                                                <span class="text-xs">SKIP</span>
+                                                <span class="text-[8px] font-bold opacity-60 mt-0.5">DIKUNCI</span>
+                                            </button>`;
+                                        } else {
+                                            buttonsHtml += `<button onclick="Multiplayer.useSkip()" class="flex flex-col items-center justify-center bg-amber-400 hover:bg-amber-500 text-slate-950 py-2.5 px-2 rounded-xl font-black uppercase tracking-wider shadow-[0_4px_12px_rgba(245,158,11,0.25)] border border-white/20 transition-all active:scale-95 w-full">
+                                                <span class="text-xs">SKIP</span>
+                                            </button>`;
+                                        }
                                     } else {
-                                        buttonsHtml += `<button disabled class="w-full max-w-xs bg-white/5 text-white/30 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest border border-white/5 cursor-not-allowed opacity-50">
-                                            SKIP: Terpakai
+                                        buttonsHtml += `<button disabled class="flex flex-col items-center justify-center bg-white/5 text-white/30 py-2.5 px-2 rounded-xl font-black uppercase tracking-wider border border-white/5 cursor-not-allowed opacity-40 w-full">
+                                            <span class="text-xs">SKIP</span>
+                                            <span class="text-[8px] font-bold opacity-60 mt-0.5">TERPAKAI</span>
                                         </button>`;
                                     }
 
                                     // +1 Button
                                     if (hasPlus1) {
-                                        buttonsHtml += `<button onclick="Multiplayer.usePlus1()" class="w-full max-w-xs bg-purple-500 hover:bg-purple-600 text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(168,85,247,0.3)] border-2 border-white/20 transition-all active:scale-95">
-                                            +1: Ajak Teman
-                                        </button>`;
+                                        if (hasUsedPowerupThisTurn) {
+                                            buttonsHtml += `<button disabled class="flex flex-col items-center justify-center bg-white/5 text-white/30 py-2.5 px-2 rounded-xl font-black uppercase tracking-wider border border-white/5 cursor-not-allowed opacity-40 w-full">
+                                                <span class="text-xs">+1</span>
+                                                <span class="text-[8px] font-bold opacity-60 mt-0.5">DIKUNCI</span>
+                                            </button>`;
+                                        } else {
+                                            buttonsHtml += `<button onclick="Multiplayer.usePlus1()" class="flex flex-col items-center justify-center bg-purple-500 hover:bg-purple-600 text-white py-2.5 px-2 rounded-xl font-black uppercase tracking-wider shadow-[0_4px_12px_rgba(168,85,247,0.25)] border border-white/20 transition-all active:scale-95 w-full">
+                                                <span class="text-xs">+1</span>
+                                            </button>`;
+                                        }
                                     } else {
-                                        buttonsHtml += `<button disabled class="w-full max-w-xs bg-white/5 text-white/30 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest border border-white/5 cursor-not-allowed opacity-50">
-                                            +1: Terpakai
+                                        buttonsHtml += `<button disabled class="flex flex-col items-center justify-center bg-white/5 text-white/30 py-2.5 px-2 rounded-xl font-black uppercase tracking-wider border border-white/5 cursor-not-allowed opacity-40 w-full">
+                                            <span class="text-xs">+1</span>
+                                            <span class="text-[8px] font-bold opacity-60 mt-0.5">TERPAKAI</span>
                                         </button>`;
                                     }
 
                                     // Throw Button
                                     if (hasThrow) {
-                                        buttonsHtml += `<button onclick="Multiplayer.useThrow()" class="w-full max-w-xs bg-blue-500 hover:bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(59,130,246,0.3)] border-2 border-white/20 transition-all active:scale-95">
-                                            THROW: Lempar Pertanyaan
-                                        </button>`;
+                                        if (hasUsedPowerupThisTurn) {
+                                            buttonsHtml += `<button disabled class="flex flex-col items-center justify-center bg-white/5 text-white/30 py-2.5 px-2 rounded-xl font-black uppercase tracking-wider border border-white/5 cursor-not-allowed opacity-40 w-full">
+                                                <span class="text-xs">THROW</span>
+                                                <span class="text-[8px] font-bold opacity-60 mt-0.5">DIKUNCI</span>
+                                            </button>`;
+                                        } else {
+                                            buttonsHtml += `<button onclick="Multiplayer.useThrow()" class="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2.5 px-2 rounded-xl font-black uppercase tracking-wider shadow-[0_4px_12px_rgba(59,130,246,0.25)] border border-white/20 transition-all active:scale-95 w-full">
+                                                <span class="text-xs">THROW</span>
+                                            </button>`;
+                                        }
                                     } else {
-                                        buttonsHtml += `<button disabled class="w-full max-w-xs bg-white/5 text-white/30 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest border border-white/5 cursor-not-allowed opacity-50">
-                                            THROW: Terpakai
+                                        buttonsHtml += `<button disabled class="flex flex-col items-center justify-center bg-white/5 text-white/30 py-2.5 px-2 rounded-xl font-black uppercase tracking-wider border border-white/5 cursor-not-allowed opacity-40 w-full">
+                                            <span class="text-xs">THROW</span>
+                                            <span class="text-[8px] font-bold opacity-60 mt-0.5">TERPAKAI</span>
                                         </button>`;
                                     }
                                 }
@@ -2242,7 +2299,7 @@
                                         <h2 class="text-xl md:text-2xl font-bold text-white leading-relaxed mb-6">"${questionText}"</h2>
                                         <p class="text-xs font-medium text-white/70">${currentCard && currentCard.t === 'wildcard' ? 'Lakukan tantangan di atas di depan teman-temanmu!' : 'Jawablah secara jujur di hadapan semua temanmu!'}</p>
                                     </div>
-                                    ${buttonsHtml ? `<div class="flex flex-col gap-3 w-full items-center mt-2">${buttonsHtml}</div>` : ''}
+                                    ${buttonsHtml ? `<div class="grid grid-cols-3 gap-2.5 w-full max-w-sm mt-2">${buttonsHtml}</div>` : ''}
                                 </div>
                             `;
                         } else {
