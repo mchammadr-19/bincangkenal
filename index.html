@@ -557,8 +557,8 @@
     <!-- SCREENS -->
     <!-- 1. MAIN MENU -->
     <div id="screen-main-menu"
-        class="screen max-w-md mx-auto flex flex-col h-[100dvh] justify-center items-center text-center py-6 w-full animate-fade overflow-y-auto custom-scroll relative z-10">
-        <div class="absolute top-2 right-2 md:top-4 md:right-4 flex gap-2 z-50">
+        class="screen max-w-md mx-auto flex flex-col min-h-[100dvh] justify-start items-center text-center pt-24 pb-12 w-full animate-fade overflow-y-auto custom-scroll relative z-10">
+        <div class="absolute top-4 right-4 flex gap-2 z-50">
             <button onclick="UI.openModal('modal-howto')"
                 class="bg-white/10 hover:bg-white/20 p-2.5 rounded-full transition-all border border-white/10 backdrop-blur-sm"
                 title="Cara Main">
@@ -580,7 +580,7 @@
             </button>
         </div>
 
-        <div class="mb-14 mt-16 shrink-0 flex flex-col items-center justify-center">
+        <div class="mb-14 mt-6 shrink-0 flex flex-col items-center justify-center">
             <!-- Custom Logo with elegant CSS fallback -->
             <img src="Logo.png" alt="Bincang Kenal Logo"
                 class="w-48 md:w-56 object-contain mb-2 z-10 transition-transform hover:scale-105 duration-500"
@@ -661,28 +661,6 @@
         </div>
 
         <div class="overflow-y-auto custom-scroll space-y-5 flex-grow pb-8 px-1">
-            <!-- AI GENERATOR IN ADMIN -->
-            <div class="glass p-6 rounded-[2rem] border border-blue-500/30 relative overflow-hidden bg-blue-900/10">
-                <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                <h3 class="text-base font-semibold text-blue-300 mb-4 flex items-center gap-2 relative z-10">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2">
-                        <path
-                            d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-                    </svg>
-                    Sistem Generator AI
-                </h3>
-                <p class="text-xs opacity-70 mb-4 text-blue-100 relative z-10 leading-relaxed">Isi database cloud secara
-                    otomatis. Sistem akan mencoba Groq, OpenAI, lalu Gemini (Auto-Fallback).</p>
-                <button id="btn-generate-ai" onclick="AIManager.generateDeck()"
-                    class="w-full py-3.5 rounded-xl text-[11px] font-bold tracking-[0.15em] uppercase transition-all shadow-lg flex items-center justify-center gap-2 bg-blue-600/60 hover:bg-blue-500 border border-blue-400/50 relative z-10">
-                    Mulai Generate Kartu
-                </button>
-                <p id="ai-status"
-                    class="text-[10px] mt-3 h-4 opacity-90 text-center transition-colors duration-300 font-medium relative z-10">
-                </p>
-            </div>
-
             <!-- Ganti label 'Kartu Lokal' menjadi 'Kartu Manual (Cloud)' -->
             <div class="glass p-5 md:p-6 rounded-[2rem] border-blue-500/10">
                 <div class="flex justify-between items-center border-b border-white/10 pb-2 mb-4">
@@ -699,22 +677,6 @@
                     <div>
                         <label class="block text-[10px] mb-2 opacity-70 uppercase tracking-widest font-black text-blue-300">Deep Talk (Manual - Cloud)</label>
                         <div id="list-def-q" class="space-y-2 max-h-60 overflow-y-auto custom-scroll pr-1"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="glass p-5 md:p-6 rounded-[2rem] border-green-500/20">
-                <div class="flex justify-between items-center border-b border-green-500/20 pb-2 mb-4">
-                    <h3 class="text-base font-semibold text-green-300 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19c.3 0 .5 0 .8-.1a4.7 4.7 0 0 0 .2-9.4 6.7 6.7 0 0 0-12.8-1.5A5.7 5.7 0 0 0 5.1 19h12.4Z"/></svg>
-                        Database Cloud AI
-                    </h3>
-                </div>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-[10px] mb-2 opacity-80 uppercase tracking-widest font-black text-green-400">Deep Talk (Cloud)</label>
-                        <div id="list-ai-q" class="space-y-2 max-h-60 overflow-y-auto custom-scroll pr-1"></div>
                     </div>
                 </div>
             </div>
@@ -1434,6 +1396,7 @@
             },
             renderSingleAdminList: (type, containerId) => {
                 const container = document.getElementById(containerId);
+                if (!container) return;
                 const list = State.adminState[type];
                 container.innerHTML = '';
                 list.forEach((item, index) => {
