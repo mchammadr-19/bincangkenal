@@ -399,13 +399,13 @@
 
         #toast {
             transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
-            transform: translateY(-150%);
+            transform: translate(-50%, -150%);
             opacity: 0;
             pointer-events: none;
         }
 
         #toast.show {
-            transform: translateY(0);
+            transform: translate(-50%, 0);
             opacity: 1;
             pointer-events: auto;
         }
@@ -1231,6 +1231,22 @@
                     gain.gain.setValueAtTime(0.03, SFX.ctx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.001, SFX.ctx.currentTime + 0.05);
                     osc.start(SFX.ctx.currentTime); osc.stop(SFX.ctx.currentTime + 0.05);
+                } else if (type === 'festive') {
+                    const now = SFX.ctx.currentTime;
+                    const frequencies = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6 arpeggio
+                    frequencies.forEach((freq, idx) => {
+                        const oscNode = SFX.ctx.createOscillator();
+                        const gainNode = SFX.ctx.createGain();
+                        oscNode.connect(gainNode);
+                        gainNode.connect(SFX.ctx.destination);
+                        oscNode.type = 'triangle';
+                        oscNode.frequency.setValueAtTime(freq, now + idx * 0.08);
+                        gainNode.gain.setValueAtTime(0, now);
+                        gainNode.gain.linearRampToValueAtTime(0.15, now + idx * 0.08 + 0.02);
+                        gainNode.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.4);
+                        oscNode.start(now + idx * 0.08);
+                        oscNode.stop(now + idx * 0.08 + 0.4);
+                    });
                 }
             }
         }; window.SFX = SFX;
@@ -2000,16 +2016,17 @@
                         overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-2xl animate-fade';
                         overlay.innerHTML = `
                             <div class="glass p-16 rounded-[4rem] border-2 border-yellow-500/50 text-center shadow-[0_0_150px_rgba(234,179,8,0.5)] transform scale-100 max-w-4xl mx-6 transition-all duration-300">
-                                <div class="flex justify-center mb-8 animate-bounce">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2">
-                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                                    </svg>
-                                </div>
                                 ${popupHtml}
                             </div>
                         `;
                         document.body.appendChild(overlay);
-                        SFX.play('wildcard');
+                        
+                        // Play festive sound and release beautiful confetti
+                        SFX.play('festive');
+                        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+                        setTimeout(() => {
+                            confetti({ particleCount: 100, spread: 120, origin: { y: 0.5 } });
+                        }, 300);
                         
                         const updateObj = { powerupRequested: null, powerupTarget: null };
                         if (type === 'throw') {
