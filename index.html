@@ -9,8 +9,8 @@
 
     <!-- Dependencies -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Ganti font menjadi Inter secara global -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Ganti font menjadi Inter secara global, tambah Anton untuk Logo -->
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
@@ -580,16 +580,15 @@
             </button>
         </div>
 
-        <div class="mb-10 mt-16 shrink-0 flex flex-col items-center justify-center">
-            <!-- Custom Logo -->
-            <img src="logo.png" alt="Bincang Kenal Logo"
-                class="w-64 md:w-80 object-contain mb-2 z-10 transition-transform hover:scale-105 duration-500"
-                onerror="this.style.display='none'; document.getElementById('fallback-text-logo').style.display='block';">
+        <div class="mb-14 mt-16 shrink-0 flex flex-col items-center justify-center">
+            <!-- Custom Logo with elegant CSS fallback -->
+            <img src="Logo.png" alt="Bincang Kenal Logo"
+                class="w-48 md:w-56 object-contain mb-2 z-10 transition-transform hover:scale-105 duration-500"
+                onerror="if (this.src.indexOf('Logo.png') !== -1) { this.src = 'logo.png'; } else { this.style.display='none'; document.getElementById('fallback-text-logo').style.display='flex'; }">
 
-            <!-- Fallback if image fails to load -->
-            <div id="fallback-text-logo" style="display:none;" class="text-center">
-                <h1 class="text-5xl md:text-7xl font-bold tracking-tighter leading-none mb-1">Bincang</h1>
-                <h1 class="text-4xl md:text-6xl font-light tracking-wide opacity-90">Kenal</h1>
+            <!-- Fallback if Logo.png and logo.png are missing or empty -->
+            <div id="fallback-text-logo" class="select-none text-center flex-col items-center justify-center font-black text-white tracking-[0.15em] transition-transform hover:scale-105 duration-500" style="display: none;">
+                <span class="text-2xl md:text-3xl uppercase">BINCANG KENAL</span>
             </div>
 
             <p id="global-pool-status"
