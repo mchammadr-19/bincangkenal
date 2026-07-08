@@ -1854,13 +1854,10 @@
                 else el.classList.add('card-glass');
 
                 const isWild = cardObj.t === 'wildcard';
-                const headerText = isWild ? `KARTU SAKTI UNTUK ${activeName.toUpperCase()}` : `GILIRAN ${activeName.toUpperCase()} MENJAWAB`;
-                const headerColorClass = isWild ? 'text-purple-400 animate-bounce' : 'text-green-400 animate-pulse';
                 const iconHtml = isWild ? '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mb-4 text-white/80"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>' : '';
 
                 txt.innerHTML = `
                     <div class="flex flex-col items-center justify-center py-6 px-2">
-                        <span class="text-xs md:text-sm font-black uppercase tracking-[0.3em] ${headerColorClass} mb-6">${headerText}</span>
                         ${iconHtml}
                         <div class="text-container text-xl md:text-3xl lg:text-4xl font-extrabold leading-relaxed text-white"></div>
                     </div>
@@ -1957,12 +1954,7 @@
                         const textContainer = faceEl ? faceEl.querySelector('.text-container') : null;
                         const currentTextInDom = textContainer ? textContainer.textContent.trim() : '';
 
-                        const headerSpan = faceEl ? faceEl.querySelector('span') : null;
-                        const currentHeaderInDom = headerSpan ? headerSpan.textContent.trim() : '';
-                        const isWild = currentCard && currentCard.t === 'wildcard';
-                        const expectedHeader = currentCard ? (isWild ? `KARTU SAKTI UNTUK ${activeName.toUpperCase()}` : `GILIRAN ${activeName.toUpperCase()} MENJAWAB`) : '';
-
-                        if (currentCard && (currentTextInDom !== currentCard.text.trim() || currentHeaderInDom !== expectedHeader)) {
+                        if (currentCard && currentTextInDom !== currentCard.text.trim()) {
                             Multiplayer.updateHostCard('front', currentCard, activeName, 0);
                         }
                     }
