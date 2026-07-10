@@ -2010,31 +2010,35 @@
                             const votePanel = document.createElement('div');
                             votePanel.className = 'glass p-5 rounded-3xl border border-white/20 w-full max-w-2xl flex flex-col gap-3 shadow-2xl animate-fade';
                             
-                            const tally = {};
-                            Object.keys(data.players).forEach(uid => tally[uid] = 0);
-                            Object.values(data.votes || {}).forEach(votedUid => {
-                                if (tally[votedUid] !== undefined) tally[votedUid]++;
+                            const pKeysSorted = Object.keys(data.players).sort((a, b) => {
+                                const nameA = (data.players[a]?.name || '').toLowerCase();
+                                const nameB = (data.players[b]?.name || '').toLowerCase();
+                                return nameA.localeCompare(nameB);
                             });
                             
                             let playersHtml = '';
-                            Object.entries(data.players).forEach(([uid, p]) => {
-                                const count = tally[uid] || 0;
-                                const voterNames = Object.entries(data.votes || {})
-                                    .filter(([voterUid, votedUid]) => votedUid === uid)
-                                    .map(([voterUid]) => data.players[voterUid]?.name || 'Pemain')
-                                    .join(', ');
+                            pKeysSorted.forEach(uid => {
+                                const p = data.players[uid];
+                                const hasSubmittedVote = data.votes && data.votes[uid] !== undefined;
                                 
                                 playersHtml += `
-                                    <div class="bg-black/30 border border-white/10 rounded-2xl p-3 flex flex-col items-center justify-center relative overflow-hidden min-w-[100px] flex-grow flex-shrink-0 text-center">
-                                        <div class="text-[10px] font-black text-white/50 uppercase tracking-widest">${p.name}</div>
-                                        <div class="text-2xl font-black text-yellow-400 my-0.5">${count} <span class="text-[10px] font-normal text-white/45">vote</span></div>
-                                        ${voterNames ? `<div class="text-[8px] text-yellow-300/80 truncate max-w-[150px] italic px-1">${voterNames}</div>` : `<div class="text-[8px] text-white/20">0 voter</div>`}
+                                    <div class="bg-black/30 border ${hasSubmittedVote ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-white/10'} rounded-2xl p-4 flex flex-col items-center justify-center relative overflow-hidden min-w-[120px] flex-grow flex-shrink-0 text-center transition-all duration-300">
+                                        <div class="text-sm font-black text-white tracking-wider mb-1">${p.name}</div>
+                                        ${hasSubmittedVote 
+                                            ? `<div class="flex items-center gap-1.5 text-[10px] font-black text-emerald-400 uppercase tracking-widest">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                                SUDAH MEMILIH
+                                               </div>`
+                                            : `<div class="flex items-center gap-1 text-[10px] font-black text-yellow-400/80 uppercase tracking-widest animate-pulse">
+                                                SEDANG BERPIKIR...
+                                               </div>`
+                                        }
                                     </div>
                                 `;
                             });
                             
                             votePanel.innerHTML = `
-                                <div class="text-center font-black uppercase tracking-[0.2em] text-[10px] text-white/60">Hasil Sementara</div>
+                                <div class="text-center font-black uppercase tracking-[0.2em] text-[10px] text-white/60">Status Voting Pemain</div>
                                 <div class="flex flex-wrap gap-2 justify-center items-stretch">${playersHtml}</div>
                             `;
                             container.appendChild(votePanel);
@@ -2411,34 +2415,44 @@
                             if (listContainer) {
                                 listContainer.innerHTML = '';
                                 
-                                const pKeys = Object.keys(d.players);
+                                const pKeys = Object.keys(d.players).sort((a, b) => {
+                                    const nameA = (d.players[a]?.name || '').toLowerCase();
+                                    const nameB = (d.players[b]?.name || '').toLowerCase();
+                                    return nameA.localeCompare(nameB);
+                                });
                                 const myVote = d.votes ? d.votes[State.currentUser.uid] : null;
                                 
                                 pKeys.forEach(uid => {
                                     const p = d.players[uid];
                                     const isMe = uid === State.currentUser.uid;
                                     const isSelected = myVote === uid;
-                                    const hasVoted = !!myVote;
                                     
                                     const btn = document.createElement('button');
-                                    btn.className = `glass flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${
-                                        isSelected 
-                                            ? 'bg-yellow-400/20 border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.4)] scale-[1.03] text-white' 
-                                            : hasVoted 
-                                                ? 'bg-white/5 border-white/5 opacity-50 text-white/50 cursor-not-allowed' 
-                                                : 'bg-white/10 border-white/10 hover:bg-white/15 active:scale-95 text-white'
-                                    }`;
-                                    
-                                    if (hasVoted) {
+                                    if (isMe) {
+                                        // Greyed out, disabled for themselves
+                                        btn.className = `glass flex flex-col items-center justify-center p-4 rounded-2xl border-2 bg-white/5 border-white/5 opacity-40 text-white/30 cursor-not-allowed`;
                                         btn.disabled = true;
+                                        btn.innerHTML = `
+                                            <span class="font-black text-xs md:text-sm tracking-wider mb-1">${p.name} (Kamu)</span>
+                                            <span class="text-[8px] font-bold text-white/45 tracking-wider uppercase">Pemain Sendiri</span>
+                                        `;
                                     } else {
-                                        btn.onclick = () => Multiplayer.submitVote(uid);
+                                        // Normal or Selected
+                                        btn.className = `glass flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${
+                                            isSelected 
+                                                ? 'bg-yellow-400/25 border-yellow-400 shadow-[0_0_20px_rgba(234,179,8,0.5)] scale-[1.03] text-white' 
+                                                : 'bg-white/10 border-white/10 hover:bg-white/15 active:scale-95 text-white'
+                                        }`;
+                                        btn.onclick = () => {
+                                            if (!isSelected) {
+                                                Multiplayer.submitVote(uid);
+                                            }
+                                        };
+                                        btn.innerHTML = `
+                                            <span class="font-black text-xs md:text-sm tracking-wider mb-1">${p.name}</span>
+                                            ${isSelected ? '<span class="text-[8px] font-black uppercase text-yellow-400 tracking-wider">PILIHANMU</span>' : '<span class="text-[8px] text-white/45">Ketuk untuk Memilih</span>'}
+                                        `;
                                     }
-                                    
-                                    btn.innerHTML = `
-                                        <span class="font-black text-xs md:text-sm tracking-wider mb-1">${p.name} ${isMe ? '(Kamu)' : ''}</span>
-                                        ${isSelected ? '<span class="text-[8px] font-black uppercase text-yellow-400 tracking-wider">PILIHANMU</span>' : ''}
-                                    `;
                                     listContainer.appendChild(btn);
                                 });
                             }
