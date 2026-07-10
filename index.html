@@ -1086,18 +1086,20 @@
 
         <div id="guest-status-view" class="flex flex-col items-center justify-center h-full w-full text-center"></div>
 
-        <div id="guest-vote-view" class="hidden flex-col h-full w-full pt-6 pb-2 items-center justify-start">
+        <div id="guest-vote-view" class="hidden flex-col h-full w-full pt-6 pb-2 items-center justify-start overflow-y-auto">
+            <div id="guest-vote-prompt-container" class="w-full max-w-md mx-auto px-4 mb-2"></div>
+            <div id="guest-vote-timer" class="mb-4 text-center font-black text-sm tracking-widest text-yellow-300 uppercase animate-pulse">Timer: 30s</div>
             <h3
-                class="text-center font-bold tracking-[0.2em] uppercase opacity-90 mb-6 text-xs md:text-sm flex items-center justify-center gap-2">
+                class="text-center font-bold tracking-[0.2em] uppercase opacity-90 mb-4 text-xs md:text-sm flex items-center justify-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2">
                     <path d="m9 12 2 2 4-4" />
                     <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
-                Pilih Pemain
+                Pilih Pemain Tercocok
             </h3>
             <div id="guest-vote-list"
-                class="grid grid-cols-2 gap-4 custom-scroll flex-grow content-start w-full max-w-md mx-auto px-4 pb-12"></div>
+                class="grid grid-cols-2 gap-3 custom-scroll flex-grow content-start w-full max-w-md mx-auto px-4 pb-12"></div>
         </div>
     </div>
 
@@ -1683,6 +1685,70 @@
                 if (State.hostInactivityTimer) clearTimeout(State.hostInactivityTimer);
                 State.hostInactivityTimer = setTimeout(() => { UI.showToast("Sesi inaktif."); Multiplayer.endHostGame(); }, State.limitMs);
             },
+            submitVote: async (votedUid) => {
+                if (!State.currentRoomId) return;
+                try {
+                    const ref = doc(getRoomsRef(), State.currentRoomId);
+                    await updateDoc(ref, { [`votes.${State.currentUser.uid}`]: votedUid });
+                    SFX.play('click');
+                } catch (e) {}
+            },
+            resolveVoting: async () => {
+                if (Multiplayer.voteInterval) {
+                    clearInterval(Multiplayer.voteInterval);
+                    Multiplayer.voteInterval = null;
+                }
+                if (!State.currentRoomId) return;
+                try {
+                    const ref = doc(getRoomsRef(), State.currentRoomId);
+                    const snap = await getDoc(ref);
+                    if (!snap.exists()) return;
+                    const data = snap.data();
+                    
+                    const pKeys = Object.keys(data.players);
+                    if (pKeys.length === 0) return;
+                    
+                    // Hitung pemenang
+                    const votes = data.votes || {};
+                    const tally = {};
+                    pKeys.forEach(uid => tally[uid] = 0);
+                    Object.values(votes).forEach(uid => {
+                        if (tally[uid] !== undefined) tally[uid]++;
+                    });
+                    
+                    // Cari uid dengan suara terbanyak
+                    let winnerUid = pKeys[0];
+                    let maxVotes = -1;
+                    pKeys.forEach(uid => {
+                        if (tally[uid] > maxVotes) {
+                            maxVotes = tally[uid];
+                            winnerUid = uid;
+                        }
+                    });
+                    
+                    // Tangani jika seri (acak dari yang memiliki vote tertinggi)
+                    const candidates = pKeys.filter(uid => tally[uid] === maxVotes);
+                    if (candidates.length > 0) {
+                        winnerUid = candidates[Math.floor(Math.random() * candidates.length)];
+                    }
+                    
+                    // Reset playerQueue ke daftar lengkap untuk round robin selanjutnya
+                    const freshQueue = Utils.shuffle([...pKeys]);
+                    
+                    // Set status kembali ke playing dengan player terpilih
+                    await updateDoc(ref, {
+                        status: 'playing',
+                        currentGreenUid: winnerUid,
+                        secondaryGreenUid: null,
+                        playerQueue: freshQueue,
+                        votes: null,
+                        lastActive: Date.now()
+                    });
+                    
+                    SFX.play('festive');
+                    confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+                } catch (e) {}
+            },
             openPlayerList: () => {
                 Multiplayer.renderPlayerList();
                 UI.openModal('modal-player-list');
@@ -1880,6 +1946,104 @@
                     
                     UI.els.mainBody.className = `p-4 md:p-8 pt-[env(safe-area-inset-top,1rem)] pb-[env(safe-area-inset-bottom,1rem)]`;
 
+                    if (data.status === 'voting') {
+                        State.activeUids = [];
+                        State.votes = data.votes || {};
+                        
+                        const totalPlayers = Object.keys(data.players).length;
+                        const votesCount = Object.keys(data.votes || {}).length;
+                        
+                        const voteCountEl = document.getElementById('host-vote-count');
+                        if (voteCountEl) voteCountEl.innerText = `${votesCount}/${totalPlayers}`;
+                        
+                        const timerEl = document.getElementById('host-voting-timer');
+                        if (timerEl) timerEl.classList.remove('hidden');
+                        
+                        const nextLabelEl = document.getElementById('host-next-label');
+                        if (nextLabelEl) nextLabelEl.innerText = "Selesaikan";
+                        
+                        if (!Multiplayer.voteInterval) {
+                            SFX.play('tick');
+                            Multiplayer.voteInterval = setInterval(async () => {
+                                const rem = Math.max(0, Math.ceil((data.votingEndTime - Date.now()) / 1000));
+                                const timerValEl = document.getElementById('timer-val');
+                                if (timerValEl) timerValEl.innerText = rem;
+                                
+                                if (rem <= 5 && rem > 0) {
+                                    SFX.play('clock');
+                                } else if (rem > 0 && rem % 5 === 0) {
+                                    SFX.play('click');
+                                }
+                                
+                                if (rem <= 0) {
+                                    clearInterval(Multiplayer.voteInterval);
+                                    Multiplayer.voteInterval = null;
+                                    await Multiplayer.resolveVoting();
+                                }
+                            }, 1000);
+                        }
+                        
+                        if (votesCount >= totalPlayers && totalPlayers > 0) {
+                            if (Multiplayer.voteInterval) {
+                                clearInterval(Multiplayer.voteInterval);
+                                Multiplayer.voteInterval = null;
+                            }
+                            setTimeout(async () => {
+                                await Multiplayer.resolveVoting();
+                            }, 800);
+                            return;
+                        }
+
+                        const currentCard = data.deck[data.currentIndex];
+                        const votingPrompt = currentCard ? currentCard.text : '';
+                        
+                        if (data.currentIndex !== Multiplayer.lastIdxHost) {
+                            Multiplayer.lastIdxHost = data.currentIndex;
+                            Multiplayer.updateHostCard('front', { t: 'normal', text: votingPrompt }, "VOTING KELOMPOK", 0);
+                        }
+                        
+                        const container = document.getElementById('arena-floating-players');
+                        if (container) {
+                            container.innerHTML = '';
+                            container.className = 'absolute inset-x-0 bottom-24 z-10 flex flex-col items-center justify-end px-4 pointer-events-auto';
+                            
+                            const votePanel = document.createElement('div');
+                            votePanel.className = 'glass p-5 rounded-3xl border border-white/20 w-full max-w-2xl flex flex-col gap-3 shadow-2xl animate-fade';
+                            
+                            const tally = {};
+                            Object.keys(data.players).forEach(uid => tally[uid] = 0);
+                            Object.values(data.votes || {}).forEach(votedUid => {
+                                if (tally[votedUid] !== undefined) tally[votedUid]++;
+                            });
+                            
+                            let playersHtml = '';
+                            Object.entries(data.players).forEach(([uid, p]) => {
+                                const count = tally[uid] || 0;
+                                const voterNames = Object.entries(data.votes || {})
+                                    .filter(([voterUid, votedUid]) => votedUid === uid)
+                                    .map(([voterUid]) => data.players[voterUid]?.name || 'Pemain')
+                                    .join(', ');
+                                
+                                playersHtml += `
+                                    <div class="bg-black/30 border border-white/10 rounded-2xl p-3 flex flex-col items-center justify-center relative overflow-hidden min-w-[100px] flex-grow flex-shrink-0 text-center">
+                                        <div class="text-[10px] font-black text-white/50 uppercase tracking-widest">${p.name}</div>
+                                        <div class="text-2xl font-black text-yellow-400 my-0.5">${count} <span class="text-[10px] font-normal text-white/45">vote</span></div>
+                                        ${voterNames ? `<div class="text-[8px] text-yellow-300/80 truncate max-w-[150px] italic px-1">${voterNames}</div>` : `<div class="text-[8px] text-white/20">0 voter</div>`}
+                                    </div>
+                                `;
+                            });
+                            
+                            votePanel.innerHTML = `
+                                <div class="text-center font-black uppercase tracking-[0.2em] text-[10px] text-white/60">Hasil Sementara</div>
+                                <div class="flex flex-wrap gap-2 justify-center items-stretch">${playersHtml}</div>
+                            `;
+                            container.appendChild(votePanel);
+                        }
+                        
+                        Multiplayer.lastStatusHost = data.status;
+                        return;
+                    }
+
                     const currentGreenUid = data.currentGreenUid;
                     const secondaryGreenUid = data.secondaryGreenUid;
 
@@ -1893,10 +2057,15 @@
 
                     // Bersihkan floating names di Arena agar layar bersih (pindah ke Daftar Pemain)
                     const container = document.getElementById('arena-floating-players');
-                    if (container) container.innerHTML = '';
+                    if (container) {
+                        container.innerHTML = '';
+                        container.className = 'absolute inset-0 z-0 pointer-events-none';
+                    }
 
                     const currentCard = data.deck[data.currentIndex];
-                    const activeName = data.players[data.currentGreenUid]?.name || 'Pemain';
+                    const nameA = data.players[data.currentGreenUid]?.name || 'Pemain';
+                    const nameB = data.secondaryGreenUid ? (data.players[data.secondaryGreenUid]?.name || 'Pemain') : null;
+                    const activeName = nameB ? `${nameA} & ${nameB}` : nameA;
 
                     if (data.currentIndex !== Multiplayer.lastIdxHost) {
                         const isFirstLoad = Multiplayer.lastIdxHost === -1;
@@ -2121,12 +2290,30 @@
                 Multiplayer.resetTimer(); const ref = doc(getRoomsRef(), State.currentRoomId);
                 const snap = await getDoc(ref); const data = snap.data(); const pKeys = Object.keys(data.players);
 
+                if (data.status === 'voting') {
+                    await Multiplayer.resolveVoting();
+                    return;
+                }
+
                 const nxt = data.currentIndex + 1; if (nxt >= data.deck.length) return Multiplayer.endHostGame();
                 const nextCard = data.deck[nxt];
 
                 let queue = data.playerQueue || [];
                 queue = queue.filter(uid => pKeys.includes(uid));
-                if (queue.length === 0) queue = Utils.shuffle([...pKeys]);
+                
+                if (queue.length === 0) {
+                    // Sesi voting dimulai karena round robin selesai!
+                    await updateDoc(ref, {
+                        status: 'voting',
+                        currentIndex: nxt,
+                        secondaryGreenUid: null,
+                        winnerUid: null,
+                        votes: {},
+                        votingEndTime: Date.now() + 30000,
+                        lastActive: Date.now()
+                    });
+                    return;
+                }
                 
                 const nextGreenUid = queue.pop() || pKeys[0] || null;
                 let players = data.players || {};
@@ -2189,6 +2376,82 @@
                     } else {
                         UI.switch('screen-guest-arena');
                         
+                        if (d.status === 'voting') {
+                            vView.classList.remove('hidden');
+                            sView.classList.add('hidden');
+                            
+                            UI.els.mainBody.className = `p-4 md:p-8 pt-[env(safe-area-inset-top,1rem)] pb-[env(safe-area-inset-bottom,1rem)] theme-red`;
+                            
+                            const currentCard = d.deck ? d.deck[d.currentIndex] : null;
+                            const questionText = currentCard ? currentCard.text : '';
+                            
+                            const promptContainer = document.getElementById('guest-vote-prompt-container');
+                            if (promptContainer) {
+                                promptContainer.innerHTML = `
+                                    <div class="glass p-5 rounded-2xl border-white/10 w-full mb-2 text-center shadow-lg">
+                                        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-yellow-400 mb-2">SIAPA YANG PALING COCOK?</p>
+                                        <h2 class="text-sm md:text-base font-black text-white italic leading-relaxed">"${questionText}"</h2>
+                                    </div>
+                                `;
+                            }
+                            
+                            const timerValEl = document.getElementById('guest-vote-timer');
+                            const updateGuestTimer = () => {
+                                const rem = Math.max(0, Math.ceil((d.votingEndTime - Date.now()) / 1000));
+                                if (timerValEl) {
+                                    timerValEl.innerText = `Timer: ${rem}s`;
+                                    timerValEl.classList.toggle('text-red-400', rem <= 5);
+                                }
+                            };
+                            updateGuestTimer();
+                            if (Multiplayer.voteInterval) clearInterval(Multiplayer.voteInterval);
+                            Multiplayer.voteInterval = setInterval(updateGuestTimer, 1000);
+                            
+                            const listContainer = document.getElementById('guest-vote-list');
+                            if (listContainer) {
+                                listContainer.innerHTML = '';
+                                
+                                const pKeys = Object.keys(d.players);
+                                const myVote = d.votes ? d.votes[State.currentUser.uid] : null;
+                                
+                                pKeys.forEach(uid => {
+                                    const p = d.players[uid];
+                                    const isMe = uid === State.currentUser.uid;
+                                    const isSelected = myVote === uid;
+                                    const hasVoted = !!myVote;
+                                    
+                                    const btn = document.createElement('button');
+                                    btn.className = `glass flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${
+                                        isSelected 
+                                            ? 'bg-yellow-400/20 border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.4)] scale-[1.03] text-white' 
+                                            : hasVoted 
+                                                ? 'bg-white/5 border-white/5 opacity-50 text-white/50 cursor-not-allowed' 
+                                                : 'bg-white/10 border-white/10 hover:bg-white/15 active:scale-95 text-white'
+                                    }`;
+                                    
+                                    if (hasVoted) {
+                                        btn.disabled = true;
+                                    } else {
+                                        btn.onclick = () => Multiplayer.submitVote(uid);
+                                    }
+                                    
+                                    btn.innerHTML = `
+                                        <span class="font-black text-xs md:text-sm tracking-wider mb-1">${p.name} ${isMe ? '(Kamu)' : ''}</span>
+                                        ${isSelected ? '<span class="text-[8px] font-black uppercase text-yellow-400 tracking-wider">PILIHANMU</span>' : ''}
+                                    `;
+                                    listContainer.appendChild(btn);
+                                });
+                            }
+                            
+                            Multiplayer.lastStatusHost = d.status;
+                            return;
+                        }
+                        
+                        if (Multiplayer.voteInterval) {
+                            clearInterval(Multiplayer.voteInterval);
+                            Multiplayer.voteInterval = null;
+                        }
+
                         const isPlaying = d.status === 'playing';
                         
                         // Tema Hijau untuk yang terpilih (Pemain aktif saat playing)
@@ -2221,8 +2484,15 @@
                         const isSecondary = d.secondaryGreenUid === State.currentUser.uid;
                         
                         if (isMeActive) {
-                            let titleHtml = `<div class="bg-white text-emerald-950 px-6 py-2 rounded-full font-black text-sm uppercase tracking-widest shadow-[0_0_30px_rgba(255,255,255,0.4)] animate-bounce">
-                                ${isSecondary ? 'IKUT MENJAWAB!' : 'GILIRANMU!'}
+                            const nameA = d.players[d.currentGreenUid]?.name || 'Pemain';
+                            const nameB = d.secondaryGreenUid ? (d.players[d.secondaryGreenUid]?.name || 'Pemain') : null;
+                            const partnerText = nameB ? (isSecondary ? `BERSAMA ${nameA.toUpperCase()}` : `BERSAMA ${nameB.toUpperCase()}`) : '';
+
+                            let titleHtml = `<div class="flex flex-col items-center gap-2">
+                                <div class="bg-white text-emerald-950 px-6 py-2 rounded-full font-black text-sm uppercase tracking-widest shadow-[0_0_30px_rgba(255,255,255,0.4)] animate-bounce">
+                                    ${isSecondary ? 'IKUT MENJAWAB!' : 'GILIRANMU!'}
+                                </div>
+                                ${partnerText ? `<span class="text-xs font-bold text-white/80 bg-white/10 px-3 py-1 rounded-full border border-white/10 tracking-wider">${partnerText}</span>` : ''}
                             </div>`;
                             
                             if (currentCard && currentCard.t === 'wildcard') {
@@ -2311,10 +2581,12 @@
                                 </div>
                             `;
                         } else {
-                            const activeName = d.players[d.currentGreenUid]?.name || 'Pemain';
+                            const nameA = d.players[d.currentGreenUid]?.name || 'Pemain';
+                            const nameB = d.secondaryGreenUid ? (d.players[d.secondaryGreenUid]?.name || 'Pemain') : null;
+                            const displayName = nameB ? `${nameA} & ${nameB}` : nameA;
                             sView.innerHTML = `
                                 <div class="flex flex-col items-center justify-center text-center px-4 py-8 gap-4 animate-fade">
-                                    <h1 class="text-3xl md:text-4xl font-black tracking-tight text-white mb-2">${activeName}</h1>
+                                    <h1 class="text-3xl md:text-4xl font-black tracking-tight text-white mb-2">${displayName}</h1>
                                     <p class="text-xs font-bold uppercase tracking-widest text-yellow-400 mb-6 animate-pulse">${currentCard && currentCard.t === 'wildcard' ? 'Menjalankan Tantangan...' : 'Sedang Menjawab...'}</p>
                                     <div class="glass p-6 rounded-2xl border-white/10 w-full max-w-sm opacity-80 shadow-lg">
                                         <p class="text-[10px] font-black uppercase tracking-[0.2em] opacity-50 mb-2">${currentCard && currentCard.t === 'wildcard' ? 'Tantangan:' : 'Mendengarkan Pertanyaan:'}</p>
