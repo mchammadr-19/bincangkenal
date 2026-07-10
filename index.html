@@ -1020,6 +1020,7 @@
                 <input type="text" id="guest-name" placeholder="Nama Panggilan"
                     class="glass-input w-full p-4 rounded-xl text-center text-base md:text-lg font-semibold placeholder-white/40"
                     maxlength="10" oninput="UI.formatName(this)" autocomplete="off">
+                <p class="text-[10px] text-center font-bold tracking-wider text-yellow-400/80 uppercase animate-pulse">Harap Gunakan Nama Asli</p>
             </div>
             <button onclick="Multiplayer.submitGuestJoin()"
                 class="w-full py-4 bg-white hover:bg-gray-200 text-black font-bold tracking-[0.15em] uppercase rounded-xl text-xs md:text-sm transition-all active:scale-95 shadow-[0_5px_20px_rgba(255,255,255,0.2)] mt-2">Gabung
@@ -2005,43 +2006,7 @@
                         const container = document.getElementById('arena-floating-players');
                         if (container) {
                             container.innerHTML = '';
-                            container.className = 'absolute inset-x-0 bottom-24 z-10 flex flex-col items-center justify-end px-4 pointer-events-auto';
-                            
-                            const votePanel = document.createElement('div');
-                            votePanel.className = 'glass p-5 rounded-3xl border border-white/20 w-full max-w-2xl flex flex-col gap-3 shadow-2xl animate-fade';
-                            
-                            const pKeysSorted = Object.keys(data.players).sort((a, b) => {
-                                const nameA = (data.players[a]?.name || '').toLowerCase();
-                                const nameB = (data.players[b]?.name || '').toLowerCase();
-                                return nameA.localeCompare(nameB);
-                            });
-                            
-                            let playersHtml = '';
-                            pKeysSorted.forEach(uid => {
-                                const p = data.players[uid];
-                                const hasSubmittedVote = data.votes && data.votes[uid] !== undefined;
-                                
-                                playersHtml += `
-                                    <div class="bg-black/30 border ${hasSubmittedVote ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-white/10'} rounded-2xl p-4 flex flex-col items-center justify-center relative overflow-hidden min-w-[120px] flex-grow flex-shrink-0 text-center transition-all duration-300">
-                                        <div class="text-sm font-black text-white tracking-wider mb-1">${p.name}</div>
-                                        ${hasSubmittedVote 
-                                            ? `<div class="flex items-center gap-1.5 text-[10px] font-black text-emerald-400 uppercase tracking-widest">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                                                SUDAH MEMILIH
-                                               </div>`
-                                            : `<div class="flex items-center gap-1 text-[10px] font-black text-yellow-400/80 uppercase tracking-widest animate-pulse">
-                                                SEDANG BERPIKIR...
-                                               </div>`
-                                        }
-                                    </div>
-                                `;
-                            });
-                            
-                            votePanel.innerHTML = `
-                                <div class="text-center font-black uppercase tracking-[0.2em] text-[10px] text-white/60">Status Voting Pemain</div>
-                                <div class="flex flex-wrap gap-2 justify-center items-stretch">${playersHtml}</div>
-                            `;
-                            container.appendChild(votePanel);
+                            container.className = 'absolute inset-0 z-0 pointer-events-none';
                         }
                         
                         Multiplayer.lastStatusHost = data.status;
